@@ -5,8 +5,6 @@ from io import BytesIO
 import os
 
 def clean_docx(file):
-    from docx.text.run import Run
-
     doc = Document(file)
 
     # Patterns to remove
@@ -21,46 +19,29 @@ def clean_docx(file):
             text = re.sub(pattern, '', text, flags=re.IGNORECASE)
         return text
 
-    def rebuild_runs(paragraph):
-        # Build full text with formatting info per run
-        parts = [(run.text, run.bold, run.italic, run.underline, run.style) for run in paragraph.runs]
-        combined_text = ''.join(text for text, *_ in parts)
-        cleaned_text = clean_text(combined_text)
-
-        # Remove existing runs
-        for _ in range(len(paragraph.runs)):
-            paragraph.runs[0]._element.getparent().remove(paragraph.runs[0]._element)
-
-        # Rebuild runs by mapping cleaned text back to original styles
-        i = 0
-        for text, bold, italic, underline, style in parts:
-            for char in text:
-                if i >= len(cleaned_text):
-                    break
-                if cleaned_text[i] == char:
-                    new_run = paragraph.add_run(char)
-                    new_run.bold = bold
-                    new_run.italic = italic
-                    new_run.underline = underline
-                    new_run.style = style
-                    i += 1
-                else:
-                    # Skip characters that were removed
-                    while i < len(cleaned_text) and cleaned_text[i] != char:
-                        i += 1
-
-    # Clean paragraphs
+    # Clean paragraphs (process full text, not per-run)
     for para in doc.paragraphs:
-        rebuild_runs(para)
+        full_text = para.text
+        cleaned_text = clean_text(full_text)
+        if cleaned_text != full_text:
+            # Remove existing runs
+            for _ in range(len(para.runs)):
+                para.runs[0]._element.getparent().remove(para.runs[0]._element)
+            para.add_run(cleaned_text)
 
-    # Clean tables
+    # Clean table content similarly
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
-                    rebuild_runs(para)
+                    full_text = para.text
+                    cleaned_text = clean_text(full_text)
+                    if cleaned_text != full_text:
+                        for _ in range(len(para.runs)):
+                            para.runs[0]._element.getparent().remove(para.runs[0]._element)
+                        para.add_run(cleaned_text)
 
-    # Remove comment indicators
+    # Remove comments
     doc_element = doc._element
     for comment in doc_element.xpath('//w:commentRangeStart | //w:commentRangeEnd | //w:commentReference'):
         comment.getparent().remove(comment)
@@ -69,7 +50,6 @@ def clean_docx(file):
     doc.save(output)
     output.seek(0)
     return output
-
 
 # Streamlit interface
 st.title("🧼 DOCX Cleaner")
