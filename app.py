@@ -7,11 +7,11 @@ import os
 def clean_docx(file):
     doc = Document(file)
 
-    # Patterns to remove: [H<number>], [hed], [dek], plus optional trailing space
+    # Patterns to remove
     tag_patterns = [
-        r'\[H\d+\]\s*',     # [H1], [H3], etc., plus space if any
-        r'\[hed\]\s*',      # [hed] + space
-        r'\[dek\]\s*'       # [dek] + space
+        r'\[H\d+\]\s*',
+        r'\[hed\]\s*',
+        r'\[dek\]\s*'
     ]
 
     def clean_text(text):
@@ -19,20 +19,29 @@ def clean_docx(file):
             text = re.sub(pattern, '', text, flags=re.IGNORECASE)
         return text
 
-    # Clean paragraphs
+    # Clean paragraphs (process full text, not per-run)
     for para in doc.paragraphs:
-        for run in para.runs:
-            run.text = clean_text(run.text)
+        full_text = para.text
+        cleaned_text = clean_text(full_text)
+        if cleaned_text != full_text:
+            # Remove existing runs
+            for _ in range(len(para.runs)):
+                para.runs[0]._element.getparent().remove(para.runs[0]._element)
+            para.add_run(cleaned_text)
 
-    # Clean tables
+    # Clean table content similarly
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
-                    for run in para.runs:
-                        run.text = clean_text(run.text)
+                    full_text = para.text
+                    cleaned_text = clean_text(full_text)
+                    if cleaned_text != full_text:
+                        for _ in range(len(para.runs)):
+                            para.runs[0]._element.getparent().remove(para.runs[0]._element)
+                        para.add_run(cleaned_text)
 
-    # Remove visible comment indicators
+    # Remove comments
     doc_element = doc._element
     for comment in doc_element.xpath('//w:commentRangeStart | //w:commentRangeEnd | //w:commentReference'):
         comment.getparent().remove(comment)
@@ -42,6 +51,7 @@ def clean_docx(file):
     output.seek(0)
     return output
 
+# Streamlit interface
 st.title("🧼 DOCX Cleaner")
 
 uploaded_file = st.file_uploader("Upload a .docx file", type="docx")
