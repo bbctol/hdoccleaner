@@ -7,14 +7,22 @@ import os
 def clean_docx(file):
     doc = Document(file)
 
-    # Define all tag patterns to remove
-    tag_patterns = [r'\[H\d+\]', r'\[hed\]', r'\[dek\]']
+    # Patterns to remove: [H<number>], [hed], [dek], plus optional trailing space
+    tag_patterns = [
+        r'\[H\d+\]\s*',     # [H1], [H3], etc., plus space if any
+        r'\[hed\]\s*',      # [hed] + space
+        r'\[dek\]\s*'       # [dek] + space
+    ]
+
+    def clean_text(text):
+        for pattern in tag_patterns:
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+        return text
 
     # Clean paragraphs
     for para in doc.paragraphs:
         for run in para.runs:
-            for pattern in tag_patterns:
-                run.text = re.sub(pattern, '', run.text, flags=re.IGNORECASE)
+            run.text = clean_text(run.text)
 
     # Clean tables
     for table in doc.tables:
@@ -22,10 +30,9 @@ def clean_docx(file):
             for cell in row.cells:
                 for para in cell.paragraphs:
                     for run in para.runs:
-                        for pattern in tag_patterns:
-                            run.text = re.sub(pattern, '', run.text, flags=re.IGNORECASE)
+                        run.text = clean_text(run.text)
 
-    # Remove comments (most visible ones)
+    # Remove visible comment indicators
     doc_element = doc._element
     for comment in doc_element.xpath('//w:commentRangeStart | //w:commentRangeEnd | //w:commentReference'):
         comment.getparent().remove(comment)
@@ -42,7 +49,6 @@ uploaded_file = st.file_uploader("Upload a .docx file", type="docx")
 if uploaded_file:
     cleaned_file = clean_docx(uploaded_file)
     
-    # Get original filename without extension
     base_filename = os.path.splitext(uploaded_file.name)[0]
     output_filename = f"{base_filename}_cleaned.docx"
 
